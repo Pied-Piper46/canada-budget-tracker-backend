@@ -27,17 +27,25 @@ def store_accounts(access_token: str, db: Session) -> None:
     client = get_plaid_client()
     accounts_request = AccountsGetRequest(access_token=access_token)
     try:
+        print(f"Fetching accounts with access_token: {access_token[:10]}...")
         accounts_response = client.accounts_get(accounts_request)
+        print(f"Found {len(accounts_response['accounts'])} accounts")
+
         for account in accounts_response["accounts"]:
+            print(f"Processing account: {account['account_id']}")
             db_account = Account(
                 account_id=account["account_id"],
                 account_name=account["name"],
                 account_official_name=account.get("official_name", ""),
-                account_type=account["type"]
+                account_type=str(account["type"])
             )
             db.merge(db_account)
+            print(f"Merged account: {account['account_id']}")
+
         db.commit()
+        print("Successfully committed accounts to database")
     except Exception as e:
+        print(f"Error in store_accounts: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to store accounts: {str(e)}")
 
 @router.post("/link/token/create")
