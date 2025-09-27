@@ -14,6 +14,10 @@ from ...utils.auth import verify_session_token
 router = APIRouter(prefix="/plaid")
 security = HTTPBearer()
 
+from pydantic import BaseModel
+class PublicTokenExchangeRequest(BaseModel):
+    public_token: str
+
 @router.post("/link/token/create")
 async def create_link_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     if not verify_session_token(credentials.credentials):
@@ -33,15 +37,16 @@ async def create_link_token(credentials: HTTPAuthorizationCredentials = Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/item/public_token/exchange")
-async def exchange_public_token(public_token: str, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+async def exchange_public_token(request: PublicTokenExchangeRequest, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     if not verify_session_token(credentials.credentials):
         raise HTTPException(status_code=401, detail="Invalid session token")
     client = get_plaid_client()
-    request = ItemPublicTokenExchangeRequest(public_token=public_token)
+    request = ItemPublicTokenExchangeRequest(public_token=request.public_token)
     try:
         response = client.item_public_token_exchange(request)
         access_token = response["access_token"]
         item_id = response["item_id"]
+        print(access_token)
 
         accounts_request = AccountsGetRequest(access_token=access_token)
         accounts_response = client.accounts_get(accounts_request)
