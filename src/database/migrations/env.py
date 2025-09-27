@@ -81,7 +81,8 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            include_schemas=True
+            include_schemas=True,
+            include_symbol=lambda name, schema=None: schema in [settings.DATABASE_SCHEMA, None]
         )
 
         with context.begin_transaction():

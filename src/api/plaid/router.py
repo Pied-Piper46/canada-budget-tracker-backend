@@ -27,7 +27,7 @@ def store_accounts(access_token: str, db: Session) -> None:
             db_account = Account(
                 account_id=account["account_id"],
                 account_name=account["name"],
-                # account_official_name=account["official_name"],
+                account_official_name=account.get("official_name", ""),
                 account_type=account["type"]
             )
             db.merge(db_account)
@@ -64,7 +64,7 @@ async def exchange_public_token(request: PublicTokenExchangeRequest, credentials
         access_token = response["access_token"]
         item_id = response["item_id"]
         print(access_token)
-        
+
         # Save to .env
         # with open(".env", "a") as f:
         #     f.write(f"\nPLAID_ACCESS_TOKEN={access_token}\nPLAID_ITEM_ID={item_id}")

@@ -4,8 +4,8 @@ from typing import Optional
 
 class AccountBase(BaseModel):
     account_id: str
-    institution_name: str
     account_name: Optional[str]
+    account_official_name: Optional[str]
     account_type: Optional[str]
 
 class AccountCreate(AccountBase):
