@@ -18,6 +18,23 @@ from pydantic import BaseModel
 class PublicTokenExchangeRequest(BaseModel):
     public_token: str
 
+def store_accounts(access_token: str, db: Session) -> None:
+    client = get_plaid_client()
+    accounts_request = AccountsGetRequest(access_token=access_token)
+    try:
+        accounts_response = client.accounts_get(accounts_request)
+        for account in accounts_response["accounts"]:
+            db_account = Account(
+                account_id=account["account_id"],
+                account_name=account["name"],
+                # account_official_name=account["official_name"],
+                account_type=account["type"]
+            )
+            db.merge(db_account)
+        db.commit()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to store accounts: {str(e)}")
+
 @router.post("/link/token/create")
 async def create_link_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     if not verify_session_token(credentials.credentials):
@@ -25,7 +42,7 @@ async def create_link_token(credentials: HTTPAuthorizationCredentials = Depends(
     client = get_plaid_client()
     request = LinkTokenCreateRequest(
         user={"client_user_id": "user_1"},
-        client_name="CIBC Budget Tracker",
+        client_name="Canada Budget Tracker",
         products=[Products("transactions")],
         country_codes=[CountryCode("CA")],
         language="en",
@@ -47,21 +64,14 @@ async def exchange_public_token(request: PublicTokenExchangeRequest, credentials
         access_token = response["access_token"]
         item_id = response["item_id"]
         print(access_token)
-
-        accounts_request = AccountsGetRequest(access_token=access_token)
-        accounts_response = client.accounts_get(accounts_request)
-        print(accounts_response)
-        for account in accounts_response["accounts"]:
-            db_account = Account(
-                account_id=account["account_id"],
-                institution_name="CIBC",
-                account_name=account["name"],
-                account_type=str(account["type"])
-            )
-            db.merge(db_account)
-        db.commit()
+        
+        # Save to .env
         # with open(".env", "a") as f:
         #     f.write(f"\nPLAID_ACCESS_TOKEN={access_token}\nPLAID_ITEM_ID={item_id}")
+
+        # Store account information to the db
+        store_accounts(access_token, db)
+
         return {"status": "success", "access_token": access_token, "item_id": item_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
