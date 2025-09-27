@@ -1,10 +1,11 @@
 from sqlalchemy import Column, String, DateTime
 from sqlalchemy.sql import func
 from ..database.db import Base
+from ..config.settings import settings
 
 class Account(Base):
     __tablename__ = "accounts"
-    __table_args__ = {"schema": "cibc_budget_tracker_sandbox"}
+    __table_args__ = {"schema": settings.DATABASE_SCHEMA}
 
     account_id = Column(String(255), primary_key=True)
     institution_name = Column(String(100), nullable=False)

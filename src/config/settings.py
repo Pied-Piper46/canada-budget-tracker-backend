@@ -9,12 +9,18 @@ env_files = {
     "production": ".env.production"
 }
 
+schema_mapping = {
+    "sandbox": "canada_budget_tracker_sandbox",
+    "development": "canada_budget_tracker_development",
+    "production": "canada_budget_tracker_production"
+}
+
 env_file = env_files.get(PLAID_ENV, ".env.sandbox")
 if not os.path.exists(env_file):
     raise FileNotFoundError(f"Env file {env_file} not found")
 
 class Settings(BaseSettings):
-    
+
     APP_PASSWORD: str = ""
     PLAID_CLIENT_ID: str
     PLAID_SECRET: str
@@ -26,5 +32,9 @@ class Settings(BaseSettings):
     class Config:
         env_file = env_file
         env_file_encoding = "utf-8"
+
+    @property
+    def DATABASE_SCHEMA(self) -> str:
+        return schema_mapping.get(self.PLAID_ENV, "canada_budget_tracker_sandbox")
 
 settings = Settings()
