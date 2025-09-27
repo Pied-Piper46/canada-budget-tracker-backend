@@ -10,6 +10,11 @@ from ...database.db import get_db
 from ...models.account import Account
 from .client import get_plaid_client
 from ...utils.auth import verify_session_token
+from ...config.settings import env_file
+import os
+
+if not os.path.exists(env_file):
+    raise FileNotFoundError(f"Env file {env_file} not found")
 
 router = APIRouter(prefix="/plaid")
 security = HTTPBearer()
@@ -63,11 +68,11 @@ async def exchange_public_token(request: PublicTokenExchangeRequest, credentials
         response = client.item_public_token_exchange(request)
         access_token = response["access_token"]
         item_id = response["item_id"]
-        print(access_token)
+        print(access_token, item_id)
 
-        # Save to .env
-        # with open(".env", "a") as f:
-        #     f.write(f"\nPLAID_ACCESS_TOKEN={access_token}\nPLAID_ITEM_ID={item_id}")
+        # Save to environment file
+        with open(env_file, "a") as f:
+            f.write(f"\nPLAID_ACCESS_TOKEN={access_token}\nPLAID_ITEM_ID={item_id}")
 
         # Store account information to the db
         store_accounts(access_token, db)
