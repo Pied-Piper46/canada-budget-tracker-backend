@@ -34,27 +34,39 @@ async def sync_transactions(credentials: HTTPAuthorizationCredentials = Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-    cursor_record = db.query(SyncCursor).first()
-    cursor = cursor_record.cursor if cursor_record else ""
+    # cursor_record = db.query(SyncCursor).first()
+    # cursor = cursor_record.cursor if cursor_record else ""
+    cursor = ""
+    request_num = 0
 
-    request = TransactionsSyncRequest(
-        access_token=access_token,
-        cursor=cursor
-    )
-    transactions = []
+    added = []
+    modified = []
+    removed = []
 
     try:
         while True:
+            request = TransactionsSyncRequest(
+                access_token=access_token,
+                cursor=cursor,
+                count=500 # maximum txs to get once
+            )
             response = client.transactions_sync(request)
-            print(response)
-            print("")
+            # print(response)
+            # print("")
 
-            for added in response["added"]:
-                transactions.append(added.to_dict())
+            added.extend(response["added"])
+            modified.extend(response(["modified"]))
+            removed.extend(response["removed"])
+
+            cursor = response["next_cursor"]
+            request_num += 1
 
             if not response["has_more"]:
                 break
 
-        return {"transactions": transactions}
+            if request_num > 3:
+                break
+
+        return {"transactions": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
