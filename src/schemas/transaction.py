@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, List
 
 class TransactionBase(BaseModel):
     transaction_id: str
@@ -25,3 +25,9 @@ class Transaction(TransactionBase):
 
     class Config:
         from_attributes = True
+
+class TransactionListResponse(BaseModel):
+    transactions: List[Transaction]
+    total: int
+    limit: int
+    offset: int

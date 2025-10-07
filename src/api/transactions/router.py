@@ -4,11 +4,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
+from datetime import date
 from ...database.db import get_db
 from ...models.account import Account
 from ...models.transaction import Transaction
-from ...schemas.transaction import Transaction as TransactionSchema
+from ...schemas.transaction import Transaction as TransactionSchema, TransactionListResponse
 from ...models.sync_cursor import SyncCursor
 from ...api.plaid.client import get_plaid_client
 from ...utils.auth import verify_session_token
@@ -121,3 +122,60 @@ async def sync_transactions(credentials: HTTPAuthorizationCredentials = Depends(
         handle_sync_error(e, access_token)
         db.rollback()
         raise
+
+@router.get("", response_model=TransactionListResponse)
+async def get_transactions(
+    account_id: str,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    limit: int = 100,
+    offset: int = 0,
+    sort_by: str = "transaction_date",
+    sort_order: str = "desc",
+    include_removed: bool = False,
+    include_pending: bool = True,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    if not verify_session_token(credentials.credentials):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+
+    # Verify account exists
+    account = db.query(Account).filter(Account.account_id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
+
+    # Build base query
+    query = db.query(Transaction).filter(Transaction.account_id == account_id)
+
+    # Apply filters
+    if not include_removed:
+        query = query.filter(Transaction.is_removed == False)
+
+    if not include_pending:
+        query = query.filter(Transaction.pending == False)
+
+    if start_date:
+        query = query.filter(Transaction.transaction_date >= start_date)
+
+    if end_date:
+        query = query.filter(Transaction.transaction_date <= end_date)
+
+    # Get total count
+    total = query.count()
+
+    # Apply sorting
+    if sort_order.lower() == "asc":
+        query = query.order_by(getattr(Transaction, sort_by).asc())
+    else:
+        query = query.order_by(getattr(Transaction, sort_by).desc())
+
+    # Apply pagination
+    transactions = query.limit(limit).offset(offset).all()
+
+    return {
+        "transactions": transactions,
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
