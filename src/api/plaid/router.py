@@ -10,7 +10,7 @@ from ...database.db import get_db
 from ...models.account import Account
 from .client import get_plaid_client
 from ...utils.auth import verify_session_token
-from ...config import settings
+from ...config.settings import settings
 from ...config.settings import env_file
 import os
 
@@ -95,18 +95,16 @@ async def create_update_link_token(credentials: HTTPAuthorizationCredentials = D
     if not verify_session_token(credentials.credentials):
         raise HTTPException(status_code=401, detail="Invalid session token")
 
-    access_token = settings.get("PLAID_ACCESS_TOKEN")
+    access_token = settings.PLAID_ACCESS_TOKEN
     if not access_token:
         raise HTTPException(status_code=400, detail="No access token available. Please connect bank account first.")
     
     client = get_plaid_client()
     request = LinkTokenCreateRequest(
-        client_id=client.configuration.client_id,
-        secret=client.configuration.secret,
         access_token=access_token,
         user={"client_user_id": "user_1"},
         client_name="Canada Budget Tracker",
-        country_code=["CA"],
+        country_codes=[CountryCode("CA")],
         language="en"
     )
     try:
