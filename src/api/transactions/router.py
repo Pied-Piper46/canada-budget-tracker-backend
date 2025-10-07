@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, extract, case
+from sqlalchemy import and_, or_
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from pydantic import BaseModel
 from typing import List, Optional
@@ -9,7 +10,13 @@ from datetime import date
 from ...database.db import get_db
 from ...models.account import Account
 from ...models.transaction import Transaction
-from ...schemas.transaction import Transaction as TransactionSchema, TransactionListResponse
+from ...schemas.transaction import (
+    Transaction as TransactionSchema,
+    TransactionListResponse,
+    TransactionSummaryResponse,
+    PeriodSummary,
+    CategorySummary
+)
 from ...models.sync_cursor import SyncCursor
 from ...api.plaid.client import get_plaid_client
 from ...utils.auth import verify_session_token
@@ -178,4 +185,119 @@ async def get_transactions(
         "total": total,
         "limit": limit,
         "offset": offset
+    }
+
+@router.get("/summary", response_model=TransactionSummaryResponse)
+async def get_transactions_summary(
+    account_id: str,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    group_by: str = "month",  # "week", "month", "year", "all"
+    category_type: str = "primary",  # "primary" or "detailed"
+    include_removed: bool = False,
+    include_pending: bool = True,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    if not verify_session_token(credentials.credentials):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+
+    # Verify account exists
+    account = db.query(Account).filter(Account.account_id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
+
+    # Build base query
+    query = db.query(Transaction).filter(Transaction.account_id == account_id)
+
+    # Apply filters
+    if not include_removed:
+        query = query.filter(Transaction.is_removed == False)
+
+    if not include_pending:
+        query = query.filter(Transaction.pending == False)
+
+    if start_date:
+        query = query.filter(Transaction.transaction_date >= start_date)
+
+    if end_date:
+        query = query.filter(Transaction.transaction_date <= end_date)
+
+    # Get all transactions for processing
+    transactions = query.all()
+
+    # Calculate period summaries
+    # Note: Plaid stores expenses as positive, income as negative
+    period_summaries = []
+    if group_by == "all":
+        total_expense = sum(t.amount for t in transactions if t.amount > 0)
+        total_income = sum(abs(t.amount) for t in transactions if t.amount < 0)
+        period_summaries.append(PeriodSummary(
+            period="all",
+            income=float(total_income),
+            expense=float(total_expense),
+            net=float(total_income - total_expense),
+            transaction_count=len(transactions)
+        ))
+    else:
+        # Group transactions by period
+        period_groups = {}
+        for t in transactions:
+            if group_by == "week":
+                # ISO week format: YYYY-Www
+                period_key = f"{t.transaction_date.year}-W{t.transaction_date.isocalendar()[1]:02d}"
+            elif group_by == "month":
+                period_key = t.transaction_date.strftime("%Y-%m")
+            elif group_by == "year":
+                period_key = str(t.transaction_date.year)
+            else:
+                raise HTTPException(status_code=400, detail=f"Invalid group_by value: {group_by}")
+
+            if period_key not in period_groups:
+                period_groups[period_key] = []
+            period_groups[period_key].append(t)
+
+        # Calculate summaries for each period
+        for period, txs in sorted(period_groups.items()):
+            expense = sum(t.amount for t in txs if t.amount > 0)
+            income = sum(abs(t.amount) for t in txs if t.amount < 0)
+            period_summaries.append(PeriodSummary(
+                period=period,
+                income=float(income),
+                expense=float(expense),
+                net=float(income - expense),
+                transaction_count=len(txs)
+            ))
+
+    # Calculate category summaries
+    category_groups = {}
+    category_field = "personal_finance_category_primary" if category_type == "primary" else "personal_finance_category_detailed"
+
+    for t in transactions:
+        category = getattr(t, category_field) or "Uncategorized"
+        if category not in category_groups:
+            category_groups[category] = []
+        category_groups[category].append(t)
+
+    category_summaries = []
+    for category, txs in sorted(category_groups.items()):
+        total_amount = sum(t.amount for t in txs)
+        category_summaries.append(CategorySummary(
+            category=category,
+            amount=float(total_amount),
+            transaction_count=len(txs),
+            category_type=category_type
+        ))
+
+    # Calculate overall totals
+    total_expense = sum(t.amount for t in transactions if t.amount > 0)
+    total_income = sum(abs(t.amount) for t in transactions if t.amount < 0)
+
+    return {
+        "period_summaries": period_summaries,
+        "category_summaries": category_summaries,
+        "total_income": float(total_income),
+        "total_expense": float(total_expense),
+        "net_total": float(total_income - total_expense),
+        "total_transactions": len(transactions)
     }

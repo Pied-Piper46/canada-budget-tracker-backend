@@ -31,3 +31,24 @@ class TransactionListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+class PeriodSummary(BaseModel):
+    period: str  # e.g., "2025-01", "2025-W01", "2025", "all"
+    income: float
+    expense: float
+    net: float
+    transaction_count: int
+
+class CategorySummary(BaseModel):
+    category: str
+    amount: float
+    transaction_count: int
+    category_type: str  # "primary" or "detailed"
+
+class TransactionSummaryResponse(BaseModel):
+    period_summaries: List[PeriodSummary]
+    category_summaries: List[CategorySummary]
+    total_income: float
+    total_expense: float
+    net_total: float
+    total_transactions: int
