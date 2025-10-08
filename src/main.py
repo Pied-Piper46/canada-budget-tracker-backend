@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .api import auth, plaid, transactions
+from .api import auth, plaid, transactions, assets
 
 app = FastAPI(title="CIBC Budget Tracker")
 app.add_middleware(
@@ -14,3 +14,4 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(plaid.router)
 app.include_router(transactions.router)
+app.include_router(assets.router)
