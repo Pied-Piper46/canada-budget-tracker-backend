@@ -31,8 +31,9 @@ router = APIRouter(prefix="/transactions")
 security = HTTPBearer()
 
 class SyncResponse(BaseModel):
-    transactions: List[TransactionSchema]
-    cursor: str
+    synced_count: int
+    latest_transaction_date: Optional[str] = None
+    sync_status: str
 
 def handle_sync_error(e, access_token: str):
     if hasattr(e, 'error_code'):
@@ -61,7 +62,8 @@ async def sync_transactions(payload: dict = Depends(verify_token), db: Session =
         count=500 # maximum txs to get once
     )
 
-    processed_transactions = []
+    synced_count = 0
+    latest_date = None
     retry_count = 0
     max_retries = 3 # just in the case that too many request are called. fix whatever you want.
 
@@ -82,9 +84,14 @@ async def sync_transactions(payload: dict = Depends(verify_token), db: Session =
                     pending=added["pending"],
                     personal_finance_category_primary=added["personal_finance_category"]["primary"] if added.get("personal_finance_category") else None,
                     personal_finance_category_detailed=added["personal_finance_category"]["detailed"] if added.get("personal_finance_category") else None,
+                    is_removed=False
                 )
                 db.merge(db_transaction)
-                processed_transactions.append(db_transaction)
+                synced_count += 1
+
+                # Track latest transaction date
+                if latest_date is None or added["date"] > latest_date:
+                    latest_date = added["date"]
 
             for modified in response["modified"]:
                 db_transaction = db.query(Transaction).filter(Transaction.transaction_id == modified["transaction_id"]).first()
@@ -113,14 +120,18 @@ async def sync_transactions(payload: dict = Depends(verify_token), db: Session =
                 raise HTTPException(status_code=500, detail="Too many pages in sync response")
 
         if cursor_record:
-            cursor.record.cursor = cursor
+            cursor_record.cursor = cursor
             cursor_record.updated_at = func.current_timestamp()
         else:
             db.add(SyncCursor(account_id=response["accounts"][0]["account_id"] if response.get("accounts") else "default_account", cursor=cursor))
         db.commit()
 
-        logger.info(f"Sync completed: {len(processed_transactions)} transactions processed")
-        return {"transactions": processed_transactions, "cursor": cursor}
+        logger.info(f"Sync completed: {synced_count} transactions processed")
+        return {
+            "synced_count": synced_count,
+            "latest_transaction_date": latest_date.isoformat() if latest_date else None,
+            "sync_status": "success"
+        }
     
     except Exception as e:
         handle_sync_error(e, access_token)
