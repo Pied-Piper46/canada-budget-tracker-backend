@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from ...database.db import get_db
 from ...models.account import Account
 from .client import get_plaid_client
-from ...utils.auth import verify_session_token
+from ...utils.auth import verify_token
 from ...config.settings import settings
 from ...config.settings import env_file
 import os
@@ -50,9 +50,7 @@ def store_accounts(access_token: str, db: Session) -> None:
         raise HTTPException(status_code=500, detail=f"Failed to store accounts: {str(e)}")
 
 @router.post("/link/token/create")
-async def create_link_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if not verify_session_token(credentials.credentials):
-        raise HTTPException(status_code=401, detail="Invalid session token")
+async def create_link_token(payload: dict = Depends(verify_token)):
     client = get_plaid_client()
     request = LinkTokenCreateRequest(
         user={"client_user_id": "user_1"},
@@ -68,9 +66,7 @@ async def create_link_token(credentials: HTTPAuthorizationCredentials = Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/item/public_token/exchange")
-async def exchange_public_token(request: PublicTokenExchangeRequest, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    if not verify_session_token(credentials.credentials):
-        raise HTTPException(status_code=401, detail="Invalid session token")
+async def exchange_public_token(request: PublicTokenExchangeRequest, payload: dict = Depends(verify_token), db: Session = Depends(get_db)):
     client = get_plaid_client()
     request = ItemPublicTokenExchangeRequest(public_token=request.public_token)
     try:
@@ -91,9 +87,7 @@ async def exchange_public_token(request: PublicTokenExchangeRequest, credentials
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/link/token/update")
-async def create_update_link_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if not verify_session_token(credentials.credentials):
-        raise HTTPException(status_code=401, detail="Invalid session token")
+async def create_update_link_token(payload: dict = Depends(verify_token)):
 
     access_token = settings.PLAID_ACCESS_TOKEN
     if not access_token:

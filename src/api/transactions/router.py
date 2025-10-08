@@ -19,7 +19,7 @@ from ...schemas.transaction import (
 )
 from ...models.sync_cursor import SyncCursor
 from ...api.plaid.client import get_plaid_client
-from ...utils.auth import verify_session_token
+from ...utils.auth import verify_token
 from ...config.settings import settings
 from ...services.plaid import check_item_status
 import time
@@ -45,10 +45,7 @@ def handle_sync_error(e, access_token: str):
     raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/sync", response_model=SyncResponse)
-async def sync_transactions(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    if not verify_session_token(credentials.credentials):
-        raise HTTPException(status_code=401, detail="Invalid session token")
-
+async def sync_transactions(payload: dict = Depends(verify_token), db: Session = Depends(get_db)):
     client = get_plaid_client()
     access_token = settings.PLAID_ACCESS_TOKEN
 
@@ -141,12 +138,10 @@ async def get_transactions(
     sort_order: str = "desc",
     include_removed: bool = False,
     include_pending: bool = True,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    payload: dict = Depends(verify_token),
     db: Session = Depends(get_db)
 ):
-    if not verify_session_token(credentials.credentials):
-        raise HTTPException(status_code=401, detail="Invalid session token")
-
+    
     # Verify account exists
     account = db.query(Account).filter(Account.account_id == account_id).first()
     if not account:
@@ -196,11 +191,9 @@ async def get_transactions_summary(
     category_type: str = "primary",  # "primary" or "detailed"
     include_removed: bool = False,
     include_pending: bool = True,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    payload: dict = Depends(verify_token),
     db: Session = Depends(get_db)
 ):
-    if not verify_session_token(credentials.credentials):
-        raise HTTPException(status_code=401, detail="Invalid session token")
 
     # Verify account exists
     account = db.query(Account).filter(Account.account_id == account_id).first()

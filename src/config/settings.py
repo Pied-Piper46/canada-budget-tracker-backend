@@ -21,7 +21,9 @@ if not os.path.exists(env_file):
 
 class Settings(BaseSettings):
 
-    APP_PASSWORD: str = ""
+    ADMIN_PASSWORD: str
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str
     PLAID_CLIENT_ID: str
     PLAID_SECRET: str
     PLAID_ENV: str = PLAID_ENV
